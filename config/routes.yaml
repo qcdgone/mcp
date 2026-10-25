@@ -1,0 +1,24 @@
+# Routes du bundle, à importer dans l'application consommatrice :
+#
+#   # config/routes/qcdgone_mcp.yaml
+#   qcdgone_mcp:
+#       resource: '@QcdgoneMcpBundle/config/routes.yaml'
+#
+# ⚠ **Le chemin est FIXE, et c'est voulu** : `/api/mcp` est aussi le motif du
+#   pare-feu `mcp` de l'application et le `resource_path` de `qcdgone/sso`.
+#   Trois réglages pour une seule adresse finiraient par diverger, et un
+#   pare-feu qui ne couvre plus la route laisse passer un appel sans jeton —
+#   que le contrôleur refuse, mais sans le `WWW-Authenticate` qui permet au
+#   client de trouver le hub.
+#
+# ⚠ **Ne pas l'importer sous un préfixe de langue** : l'adresse du serveur est
+#   collée une fois dans le connecteur, elle ne se traduit pas.
+qcdgone_mcp:
+    path: /api/mcp
+    controller: Qcdgone\Mcp\Controller\McpController::traiter
+    methods: [POST]
+
+qcdgone_mcp_flux:
+    path: /api/mcp
+    controller: Qcdgone\Mcp\Controller\McpController::flux
+    methods: [GET]

@@ -1,0 +1,54 @@
+{
+    "name": "qcdgone/mcp",
+    "description": "Serveur MCP des applications du parc : protocole, catalogue d'outils, gardes et journal ; chaque application garde ses outils et ses droits",
+    "type": "symfony-bundle",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.2",
+        "psr/log": "^3.0",
+        "qcdgone/sso": "^1.15.1",
+        "symfony/config": "^7.2|^8.0",
+        "symfony/dependency-injection": "^7.2|^8.0",
+        "symfony/framework-bundle": "^7.2|^8.0",
+        "symfony/http-foundation": "^7.2|^8.0",
+        "symfony/http-kernel": "^7.2|^8.0",
+        "symfony/routing": "^7.2|^8.0",
+        "symfony/security-bundle": "^7.2|^8.0"
+    },
+    "suggest": {
+        "qcdgone/api": "Fait entrer les appels MCP dans le quota et le journal api_call (AppelantDelegue)",
+        "symfony/rate-limiter": "Pour la garde LimiteParUtilisateur"
+    },
+    "autoload": {
+        "psr-4": {
+            "Qcdgone\\Mcp\\": "src/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12.0",
+        "qcdgone/api": "^0.5.1",
+        "symfony/rate-limiter": "^7.2|^8.0",
+        "symfony/yaml": "^7.2|^8.0"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Qcdgone\\Mcp\\Tests\\": "tests/"
+        }
+    },
+    "repositories": [
+        {
+            "name": "qcdgone-sso",
+            "type": "vcs",
+            "url": "https://github.com/qcdgone/sso.git"
+        },
+        {
+            "name": "qcdgone-api",
+            "type": "vcs",
+            "url": "https://github.com/qcdgone/api.git"
+        }
+    ],
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}
