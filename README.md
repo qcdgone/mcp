@@ -127,6 +127,30 @@ Le catalogue refuse un champ inconnu ou un champ obligatoire manquant **avant**
 d'appeler le domaine : le schéma annonce `additionalProperties: false`, et le
 catalogue l'applique.
 
+### Un domaine réservé à un rôle
+
+Un domaine qui implémente `Qcdgone\Mcp\DomaineReserve` n'existe que pour son
+rôle : `role()` est passé à `isGranted()` à chaque appel, `consignes()` est
+ajouté aux instructions du serveur pour qui le voit seulement.
+
+```php
+final readonly class Facturation implements DomaineReserve
+{
+    public function role(): string { return 'ROLE_SUPER_ADMIN'; }
+    public function consignes(): string { return 'Billing: start with accounts_list…'; }
+    // definitions(), appeler() : comme un DomaineMcp
+}
+```
+
+- Pour qui n'a pas le rôle, ses outils ne sont **ni listés, ni appelables**
+  (« outil inconnu », mot pour mot comme un nom qui n'existe pas), et ses
+  consignes n'apparaissent pas.
+- **Le défaut ferme** : sans `security.authorization_checker`, personne ne voit
+  un domaine réservé.
+- Le pare-feu ouvre alors `/api/mcp` au rôle le plus bas (`ROLE_USER`) ; c'est
+  le rôle de chaque domaine qui trie.
+- Les droits sur un objet (ce projet, cette entreprise) restent dans le domaine.
+
 ## Gardes et journal
 
 - Une **garde** implémente `Garde\GardeDAppel`. Elle joue avant chaque outil,
@@ -191,4 +215,5 @@ surtout à changer d'espace de noms :
 | `path('app_api_mcp')` | `path('qcdgone_mcp')` |
 | tag `app.mcp.domaine` / `app.mcp.garde` | aucun : autoconfiguration |
 | `GardeDAppel::verifier(…, list<Cible>)` | `verifier(…, Arguments)` : la garde résout ses cibles |
+| familles d'outils filtrées par rôle dans le serveur (swan) | `DomaineReserve` |
 | `Outil::lecture()` → `openWorldHint: true` (google-ads) | passer `exterieur: true` |

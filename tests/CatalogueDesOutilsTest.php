@@ -10,6 +10,8 @@ use Qcdgone\Mcp\ArgumentsInvalides;
 use Qcdgone\Mcp\CatalogueDesOutils;
 use Qcdgone\Mcp\Garde\GardeDAppel;
 use Qcdgone\Mcp\Tests\Double\DomaineDEssai;
+use Qcdgone\Mcp\Tests\Double\DomaineReserveDEssai;
+use Qcdgone\Mcp\Tests\Double\DroitsDEssai;
 
 final class CatalogueDesOutilsTest extends TestCase
 {
@@ -79,5 +81,55 @@ final class CatalogueDesOutilsTest extends TestCase
         self::assertSame('Écrire', $catalogue->definition('ecrire')['title']);
         self::assertNull($catalogue->definition('inexistant'));
         self::assertTrue($catalogue->existe('vide'));
+    }
+
+    /** ⚠ Pour qui n'a pas le rôle, l'outil n'existe pas : ni listé, ni appelable, ni nommé dans les consignes. */
+    public function testUnDomaineReserveNExistePasSansSonRole(): void
+    {
+        $reserve = new DomaineReserveDEssai();
+        $catalogue = new CatalogueDesOutils([new DomaineDEssai(), $reserve], [], new DroitsDEssai(['ROLE_USER']));
+
+        self::assertSame(['lire', 'ecrire', 'vide'], array_column($catalogue->definitions(), 'name'));
+        self::assertFalse($catalogue->existe('factures_lister'));
+        self::assertNull($catalogue->definition('factures_lister'));
+        self::assertSame([], $catalogue->consignes());
+
+        try {
+            $catalogue->appeler('factures_lister', []);
+            self::fail('L’outil réservé aurait dû être inconnu.');
+        } catch (ArgumentsInvalides $e) {
+            // Mot pour mot le message d'un nom qui n'existe nulle part.
+            self::assertSame('Outil inconnu : factures_lister', $e->getMessage());
+        }
+        self::assertSame([], $reserve->appels);
+    }
+
+    public function testUnDomaineReserveSeVoitEtSAppelleAvecSonRole(): void
+    {
+        $reserve = new DomaineReserveDEssai();
+        $catalogue = new CatalogueDesOutils([new DomaineDEssai(), $reserve], [], new DroitsDEssai(['ROLE_COMPTABLE']));
+
+        self::assertContains('factures_lister', array_column($catalogue->definitions(), 'name'));
+        self::assertSame(['factures' => []], $catalogue->appeler('factures_lister', []));
+        self::assertSame(['Facturation : commencez par factures_lister.'], $catalogue->consignes());
+    }
+
+    /** ⚠ Le défaut ferme : sans vérificateur de droits, personne ne voit un domaine réservé. */
+    public function testSansVerificateurDeDroitsUnDomaineReserveResteFerme(): void
+    {
+        self::assertFalse((new CatalogueDesOutils([new DomaineReserveDEssai()]))->existe('factures_lister'));
+    }
+
+    /** ⚠ Le service survit aux requêtes (worker, tests) : la visibilité suit l'appelant du moment. */
+    public function testLaVisibiliteSuitLAppelantDuMoment(): void
+    {
+        $droits = new DroitsDEssai(['ROLE_COMPTABLE']);
+        $catalogue = new CatalogueDesOutils([new DomaineReserveDEssai()], [], $droits);
+        self::assertTrue($catalogue->existe('factures_lister'));
+
+        $droits->roles = [];
+
+        self::assertFalse($catalogue->existe('factures_lister'));
+        self::assertSame([], $catalogue->definitions());
     }
 }

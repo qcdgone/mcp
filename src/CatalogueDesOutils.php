@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Qcdgone\Mcp;
 
 use Qcdgone\Mcp\Garde\GardeDAppel;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
 /**
  * Tous les outils du serveur MCP, rangés par domaine, et les gardes jouées
@@ -17,7 +18,12 @@ use Qcdgone\Mcp\Garde\GardeDAppel;
  *
  * ⚠ **Deux outils du même nom sont refusés**, au premier usage : le second
  *   masquerait le premier sans que rien ne le dise, et l'agent appellerait l'un
- *   en croyant appeler l'autre.
+ *   en croyant appeler l'autre. Y compris entre deux domaines réservés à des
+ *   rôles différents : le doublon dépendrait sinon de qui appelle.
+ *
+ * ⚠ **Un domaine réservé ({@see DomaineReserve}) n'existe que pour son rôle**,
+ *   vérifié à CHAQUE lecture, jamais gardé d'une requête à l'autre : le service
+ *   survit aux requêtes dans un worker ou un test, l'appelant non.
  */
 final class CatalogueDesOutils
 {
@@ -34,24 +40,42 @@ final class CatalogueDesOutils
     public function __construct(
         private readonly iterable $domaines,
         private readonly iterable $gardes = [],
+        private readonly ?AuthorizationCheckerInterface $droits = null,
     ) {
     }
 
-    /** @return list<array<string, mixed>> */
+    /** @return list<array<string, mixed>> les outils que l'appelant voit */
     public function definitions(): array
     {
-        return array_values($this->tables()[1]);
+        [$index, $definitions] = $this->tables();
+
+        return array_values(array_filter($definitions, fn (string $nom): bool => $this->visible($index[$nom]), \ARRAY_FILTER_USE_KEY));
     }
 
-    /** @return array<string, mixed>|null la définition de l'outil, `null` s'il n'existe pas */
+    /** @return array<string, mixed>|null la définition de l'outil, `null` s'il n'existe pas pour l'appelant */
     public function definition(string $nom): ?array
     {
-        return $this->tables()[1][$nom] ?? null;
+        return $this->existe($nom) ? $this->tables()[1][$nom] : null;
     }
 
     public function existe(string $nom): bool
     {
-        return isset($this->tables()[0][$nom]);
+        $domaine = $this->tables()[0][$nom] ?? null;
+
+        return null !== $domaine && $this->visible($domaine);
+    }
+
+    /** @return list<string> les consignes des domaines réservés que l'appelant voit */
+    public function consignes(): array
+    {
+        $consignes = [];
+        foreach ($this->domaines as $domaine) {
+            if ($domaine instanceof DomaineReserve && $this->visible($domaine) && '' !== trim($domaine->consignes())) {
+                $consignes[] = trim($domaine->consignes());
+            }
+        }
+
+        return $consignes;
     }
 
     /**
@@ -61,7 +85,11 @@ final class CatalogueDesOutils
      */
     public function appeler(string $nom, array $arguments): array
     {
-        $domaine = $this->tables()[0][$nom] ?? throw new ArgumentsInvalides(\sprintf('Outil inconnu : %s', $nom));
+        $domaine = $this->tables()[0][$nom] ?? null;
+        // ⚠ Un outil réservé à un autre rôle est inconnu, mot pour mot.
+        if (null === $domaine || !$this->visible($domaine)) {
+            throw new ArgumentsInvalides(\sprintf('Outil inconnu : %s', $nom));
+        }
         $definition = $this->definitions[$nom];
 
         // ⚠ Le schéma annonce `additionalProperties: false` : un champ mal
@@ -87,6 +115,16 @@ final class CatalogueDesOutils
         }
 
         return $domaine->appeler($nom, $lus);
+    }
+
+    private function visible(DomaineMcp $domaine): bool
+    {
+        if (!$domaine instanceof DomaineReserve) {
+            return true;
+        }
+
+        // ⚠ Le défaut ferme : sans vérificateur, personne ne voit un domaine réservé.
+        return null !== $this->droits && $this->droits->isGranted($domaine->role());
     }
 
     /** @return array{0: array<string, DomaineMcp>, 1: array<string, array<string, mixed>>} */

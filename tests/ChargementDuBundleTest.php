@@ -51,6 +51,17 @@ final class ChargementDuBundleTest extends TestCase
         $this->configurer(['name' => 'essai', 'title' => 'Essai']);
     }
 
+    /** ⚠ Sans lui, les domaines réservés à un rôle seraient fermés à tous, administrateurs compris. */
+    public function testLeCatalogueRecoitLeVerificateurDeDroits(): void
+    {
+        $conteneur = $this->construire(['name' => 'essai', 'title' => 'Essai', 'instructions' => '…']);
+        (new MergeExtensionConfigurationPass())->process($conteneur);
+
+        $droits = $conteneur->getDefinition(CatalogueDesOutils::class)->getArgument('$droits');
+        self::assertInstanceOf(Reference::class, $droits);
+        self::assertSame('security.authorization_checker', (string) $droits);
+    }
+
     public function testLaGardeDeDebitNExisteQueSiUnLimiteurEstNomme(): void
     {
         $sans = $this->construire(['name' => 'essai', 'title' => 'Essai', 'instructions' => '…']);

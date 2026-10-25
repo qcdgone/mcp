@@ -13,6 +13,8 @@ use Qcdgone\Mcp\Garde\GardeDAppel;
 use Qcdgone\Mcp\Journal\IssueDAppel;
 use Qcdgone\Mcp\ServeurMcp;
 use Qcdgone\Mcp\Tests\Double\DomaineDEssai;
+use Qcdgone\Mcp\Tests\Double\DomaineReserveDEssai;
+use Qcdgone\Mcp\Tests\Double\DroitsDEssai;
 use Qcdgone\Mcp\Tests\Double\JournalEnMemoire;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -72,6 +74,19 @@ final class ServeurMcpTest extends TestCase
 
         self::assertArrayNotHasKey('icons', $resultat['serverInfo']);
         self::assertArrayNotHasKey('websiteUrl', $resultat['serverInfo']);
+    }
+
+    /** ⚠ Les consignes d'un domaine réservé ne s'affichent qu'à qui le voit : elles le nommeraient. */
+    public function testLesConsignesDUnDomaineReserveSuiventLeRole(): void
+    {
+        $serveur = fn (array $roles): ServeurMcp => new ServeurMcp(
+            new CatalogueDesOutils([new DomaineDEssai(), new DomaineReserveDEssai()], [], new DroitsDEssai($roles)),
+            new RequestStack(),
+            ['name' => 'essai', 'title' => 'Essai', 'version' => '1.0', 'instructions' => 'Commencez par lire.', 'website_path' => null, 'icon' => ['path' => null, 'mime_type' => 'image/png', 'sizes' => []]],
+        );
+
+        self::assertSame('Commencez par lire.', $this->initialiser($serveur([]), '2025-06-18')['instructions']);
+        self::assertSame('Commencez par lire. Facturation : commencez par factures_lister.', $this->initialiser($serveur(['ROLE_COMPTABLE']), '2025-06-18')['instructions']);
     }
 
     public function testUneMethodeInconnueEstUneErreurDeProtocole(): void

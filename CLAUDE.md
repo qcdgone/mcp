@@ -51,6 +51,10 @@ voit ce qu'elle voit, et pas plus.
   `isError` masquerait un défaut sous un message que l'agent recopierait poliment.
 - **Un appelant qui n'implémente pas `UtilisateurMcpInterface` est refusé.** Le
   défaut ferme ; il n'ouvre jamais.
+- **Un domaine réservé (`DomaineReserve`) n'existe pas pour qui n'a pas son
+  rôle** : ni listé, ni appelable, ni nommé dans les instructions. Sans
+  vérificateur de droits, il est fermé à tous. La visibilité se calcule à chaque
+  lecture, jamais gardée : le catalogue survit aux requêtes, l'appelant non.
 - **L'appelant délégué garde le format `utilisateur:{id}`.** Le changer remet à zéro
   les décomptes du jour et coupe l'historique du journal en deux.
 - **Le chemin `/api/mcp` est fixe.** Il est aussi le motif du pare-feu et le

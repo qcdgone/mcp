@@ -124,7 +124,8 @@ final readonly class ServeurMcp
             'protocolVersion' => \in_array($demandee, self::VERSIONS, true) ? $demandee : self::VERSIONS[0],
             'capabilities' => ['tools' => ['listChanged' => false]],
             'serverInfo' => $serveur,
-            'instructions' => $p['instructions'],
+            // Les consignes des domaines réservés suivent, pour qui les voit seulement.
+            'instructions' => implode(' ', [$p['instructions'], ...$this->outils->consignes()]),
         ];
     }
 

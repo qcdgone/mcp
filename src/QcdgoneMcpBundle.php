@@ -102,7 +102,9 @@ final class QcdgoneMcpBundle extends AbstractBundle
         // `src/` : le parc l'attend explicite.
         $services->set(CatalogueDesOutils::class)
             ->arg('$domaines', tagged_iterator('qcdgone_mcp.domaine'))
-            ->arg('$gardes', tagged_iterator('qcdgone_mcp.garde'));
+            ->arg('$gardes', tagged_iterator('qcdgone_mcp.garde'))
+            // Pour les domaines réservés à un rôle ; sans lui, ils restent fermés.
+            ->arg('$droits', service('security.authorization_checker')->nullOnInvalid());
 
         $services->set(ServeurMcp::class)
             ->arg('$presentation', [
