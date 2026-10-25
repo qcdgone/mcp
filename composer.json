@@ -5,6 +5,7 @@
     "license": "proprietary",
     "require": {
         "php": ">=8.2",
+        "psr/cache": "^2.0|^3.0",
         "psr/log": "^3.0",
         "qcdgone/sso": "^1.15.1",
         "symfony/config": "^7.2|^8.0",
@@ -17,7 +18,8 @@
     },
     "suggest": {
         "qcdgone/api": "Fait entrer les appels MCP dans le quota et le journal api_call (AppelantDelegue)",
-        "symfony/rate-limiter": "Pour la garde LimiteParUtilisateur"
+        "symfony/rate-limiter": "Pour la garde LimiteParUtilisateur",
+        "symfony/lock": "Refuse le second de deux envois simultanés sur la même adresse de dépôt"
     },
     "autoload": {
         "psr-4": {
@@ -27,6 +29,8 @@
     "require-dev": {
         "phpunit/phpunit": "^12.0",
         "qcdgone/api": "^0.5.1",
+        "symfony/cache": "^7.2|^8.0",
+        "symfony/lock": "^7.2|^8.0",
         "symfony/rate-limiter": "^7.2|^8.0",
         "symfony/yaml": "^7.2|^8.0"
     },

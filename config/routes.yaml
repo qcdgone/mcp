@@ -22,3 +22,13 @@ qcdgone_mcp_flux:
     path: /api/mcp
     controller: Qcdgone\Mcp\Controller\McpController::flux
     methods: [GET]
+
+# Le dépôt d'un fichier par une adresse à usage unique (Depot\Depots) : SANS jeton
+# du hub, l'adresse est le droit. ⚠ À ouvrir dans le pare-feu de l'application
+# (README), hors du pare-feu `mcp` dont le motif `^/api/mcp$` ne la couvre pas.
+qcdgone_mcp_depot:
+    path: /api/mcp/depot/{jeton}
+    controller: Qcdgone\Mcp\Controller\DepotController::recevoir
+    methods: [PUT]
+    requirements:
+        jeton: '[0-9a-f]{64}'

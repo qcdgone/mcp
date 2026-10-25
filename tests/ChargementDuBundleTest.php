@@ -7,12 +7,15 @@ namespace Qcdgone\Mcp\Tests;
 use PHPUnit\Framework\TestCase;
 use Qcdgone\Api\Security\DelegatedCallerResolverInterface;
 use Qcdgone\Mcp\CatalogueDesOutils;
+use Qcdgone\Mcp\Controller\DepotController;
 use Qcdgone\Mcp\Controller\McpController;
+use Qcdgone\Mcp\Depot\Depots;
 use Qcdgone\Mcp\Garde\LimiteParUtilisateur;
 use Qcdgone\Mcp\QcdgoneMcpBundle;
 use Qcdgone\Mcp\Securite\AppelantDelegue;
 use Qcdgone\Mcp\ServeurMcp;
 use Qcdgone\Mcp\Tests\Double\DomaineDEssai;
+use Qcdgone\Mcp\Tests\Double\ReceveurDEssai;
 use Qcdgone\Mcp\Tests\Double\UtilisateurDEssai;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
@@ -41,6 +44,19 @@ final class ChargementDuBundleTest extends TestCase
         self::assertTrue($catalogue->existe('lire'), 'L’autoconfiguration doit poser le tag sur un DomaineMcp.');
         self::assertTrue($conteneur->has(ServeurMcp::class));
         self::assertTrue($conteneur->has(McpController::class));
+    }
+
+    /** ⚠ L'autoconfiguration recense un réceptionnaire de l'application sans rien déclarer. */
+    public function testUnReceptionnaireDeLApplicationEstRecense(): void
+    {
+        $conteneur = $this->compiler(['name' => 'essai', 'title' => 'Essai', 'instructions' => '…'], static function (ContainerBuilder $builder): void {
+            $builder->register(ReceveurDEssai::class, ReceveurDEssai::class)->setAutoconfigured(true);
+        });
+
+        $depots = $conteneur->get(Depots::class);
+        \assert($depots instanceof Depots);
+        self::assertInstanceOf(ReceveurDEssai::class, $depots->receveur('image'));
+        self::assertTrue($conteneur->has(DepotController::class));
     }
 
     /** ⚠ Le texte que l'agent lit avant tout appel : sans lui, il devine. */
@@ -124,6 +140,9 @@ final class ChargementDuBundleTest extends TestCase
         $builder->register('security.helper', \stdClass::class);
         $builder->setAlias(\Symfony\Bundle\SecurityBundle\Security::class, 'security.helper');
         $builder->register('limiter.mcp_utilisateur', \stdClass::class);
+        $builder->register('cache.app', \Symfony\Component\Cache\Adapter\ArrayAdapter::class);
+        $builder->register('router', \Symfony\Component\Routing\Generator\UrlGenerator::class)
+            ->setArguments([new \Symfony\Component\Routing\RouteCollection(), new \Symfony\Component\Routing\RequestContext()]);
         $builder->register(DomaineDEssai::class, DomaineDEssai::class)->setAutoconfigured(true);
         if (null !== $application) {
             $application($builder);
@@ -140,7 +159,7 @@ final class ChargementDuBundleTest extends TestCase
         $builder->addCompilerPass(new class implements \Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface {
             public function process(ContainerBuilder $container): void
             {
-                foreach ([CatalogueDesOutils::class, ServeurMcp::class, McpController::class] as $id) {
+                foreach ([CatalogueDesOutils::class, ServeurMcp::class, McpController::class, Depots::class, DepotController::class] as $id) {
                     $container->getDefinition($id)->setPublic(true);
                 }
                 if ($container->hasAlias(DelegatedCallerResolverInterface::class)) {

@@ -151,6 +151,66 @@ final readonly class Facturation implements DomaineReserve
   le rôle de chaque domaine qui trie.
 - Les droits sur un objet (ce projet, cette entreprise) restent dans le domaine.
 
+## Recevoir un fichier : les adresses de dépôt
+
+Un agent ne peut pas joindre un fichier à un appel d'outil, et le recopier en
+base64 dans ses arguments coûte des centaines de milliers de caractères. Un
+outil de l'application ouvre donc une **adresse à usage unique** ; l'agent y
+envoie le binaire en `PUT`, sans encodage ni jeton (`curl --data-binary`).
+
+1. **Un réceptionnaire** par nature de fichier, recensé par l'autoconfiguration.
+   Le contrôle du contenu est le sien : pour une image, `qcdgone/builder`
+   (`ImageUploadHandler::depuisDesOctets()`).
+
+```php
+final readonly class ReceveurDImages implements ReceveurDeDepot
+{
+    public function nature(): string { return 'image'; }
+    public function octetsMax(): int { return 8 * 1024 * 1024; }
+    public function recevoir(string $octets, DepotOuvert $depot): array
+    {
+        try {
+            $image = $this->images->depuisDesOctets($octets, 'uploads/pages', 1600);
+        } catch (ImageUploadException $e) {
+            throw new DepotRefuse($e->getMessage());   // 422, rien n'est écrit
+        }
+
+        return ['chemin' => $image['url']];           // la réponse au PUT
+    }
+}
+```
+
+2. **Un outil** qui rend l'adresse, dans le domaine qui a le droit d'écrire :
+   `$this->depots->ouvrir('image', $utilisateur)` rend `adresse`, `methode`,
+   `expire_le`, `octets_max` et un `exemple` de `curl`.
+3. **Le pare-feu** : la route `PUT /api/mcp/depot/{jeton}` (`qcdgone_mcp_depot`)
+   n'a pas de jeton du hub, et le motif `^/api/mcp$` du pare-feu `mcp` ne la
+   couvre pas. À placer AVANT `main` :
+
+```yaml
+firewalls:
+    mcp_depot:
+        pattern: ^/api/mcp/depot/
+        stateless: true
+        security: false
+```
+
+- **Usage unique, consommé au premier `PUT`, réussi ou non**, expiré après
+  `depot_duree_s` (900 s par défaut, de 60 à 3600). Le jeton n'est jamais gardé :
+  la clé du cache (`cache.app`) est son empreinte.
+- Réponses : 200 (ce que rend le réceptionnaire), 400 corps vide, 410 adresse
+  inconnue, expirée ou déjà utilisée, 413 trop lourd (vérifié sur
+  `Content-Length` avant lecture, puis lecture arrêtée au plafond), 422 refusé
+  par le réceptionnaire.
+- **Avec `symfony/lock`** (`lock.factory`), le second de deux `PUT` simultanés est
+  refusé ; sans lui, les deux peuvent passer.
+- **Le journal** : l'émission est un appel d'outil (`JournalDesAppels`) ; le
+  dépôt passe par `Journal\JournalDesDepots`, facultatif, qui reçoit le dépôt
+  (nature, compte) et le poids, jamais le contenu.
+- ⚠ L'adresse figure dans les journaux d'accès du serveur web : elle n'y sert
+  plus, puisqu'elle est consommée.
+- Sans réceptionnaire, rien ne change : toute adresse est inconnue (410).
+
 ## Gardes et journal
 
 - Une **garde** implémente `Garde\GardeDAppel`. Elle joue avant chaque outil,

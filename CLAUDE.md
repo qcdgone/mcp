@@ -31,6 +31,7 @@ de protocole se fait ici, jamais dans une application.
 | Le pare-feu | l'ordre des pare-feux est arbitré par l'application ; un bundle qui en ajoute un ne le place jamais au bon endroit |
 | Les droits métier | `ProjectScope`, `DroitEffectif`, `CommercialAccessPolicy`… : chaque application a les siens, et ce sont les MÊMES que ses écrans |
 | La validation par aperçu puis confirmation de google-ads | une seule application en a l'usage ; elle montera le jour où une deuxième en aura besoin |
+| Le contrôle d'un fichier déposé (image, PDF) | le réceptionnaire de l'application, qui s'appuie sur `qcdgone/builder` pour une image ; le bundle ne porte que l'adresse et sa réception |
 | L'édition du document builder (`bloc_*`, `rangee_*`) | les opérations sur le document vont dans `qcdgone/builder`, sans notion de MCP ; seul le domaine d'outils viendra ici |
 
 ⚠ **Ne jamais accepter de clé d'API sur le serveur.** Une clé ne désigne personne.
@@ -55,6 +56,10 @@ voit ce qu'elle voit, et pas plus.
   rôle** : ni listé, ni appelable, ni nommé dans les instructions. Sans
   vérificateur de droits, il est fermé à tous. La visibilité se calcule à chaque
   lecture, jamais gardée : le catalogue survit aux requêtes, l'appelant non.
+- **Une adresse de dépôt sert UNE fois**, consommée au premier `PUT` même
+  refusé, et seule l'empreinte de son jeton est gardée. Le contenu du fichier
+  est l'affaire du réceptionnaire de l'application, jamais du bundle, qui ne
+  dépend pas de `qcdgone/builder`.
 - **L'appelant délégué garde le format `utilisateur:{id}`.** Le changer remet à zéro
   les décomptes du jour et coupe l'historique du journal en deux.
 - **Le chemin `/api/mcp` est fixe.** Il est aussi le motif du pare-feu et le

@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Qcdgone\Mcp;
 
+use Qcdgone\Mcp\Controller\DepotController;
 use Qcdgone\Mcp\Controller\McpController;
+use Qcdgone\Mcp\Depot\Depots;
+use Qcdgone\Mcp\Depot\ReceveurDeDepot;
 use Qcdgone\Mcp\DependencyInjection\AppelantDelegueParDefaut;
 use Qcdgone\Mcp\Garde\GardeDAppel;
 use Qcdgone\Mcp\Garde\LimiteParUtilisateur;
 use Qcdgone\Mcp\Journal\JournalDesAppels;
+use Qcdgone\Mcp\Journal\JournalDesDepots;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -78,6 +82,12 @@ final class QcdgoneMcpBundle extends AbstractBundle
                     ->info('Nom d’un limiteur de `framework.rate_limiter` (« mcp_utilisateur ») : plafond d’appels d’outils par personne. null pour aucun.')
                     ->defaultNull()
                 ->end()
+                ->integerNode('depot_duree_s')
+                    // ⚠ Court à dessein : une adresse de dépôt est un droit
+                    //   d'écriture sans jeton. Assez pour générer puis envoyer.
+                    ->info('Durée de vie d’une adresse de dépôt (Depots::ouvrir()), en secondes.')
+                    ->defaultValue(900)->min(60)->max(3600)
+                ->end()
             ->end();
     }
 
@@ -94,6 +104,7 @@ final class QcdgoneMcpBundle extends AbstractBundle
         //   l'interface n'a rien d'autre à déclarer.
         $builder->registerForAutoconfiguration(DomaineMcp::class)->addTag('qcdgone_mcp.domaine');
         $builder->registerForAutoconfiguration(GardeDAppel::class)->addTag('qcdgone_mcp.garde');
+        $builder->registerForAutoconfiguration(ReceveurDeDepot::class)->addTag('qcdgone_mcp.receveur');
 
         $services = $container->services()
             ->defaults()->autowire()->autoconfigure();
@@ -121,6 +132,21 @@ final class QcdgoneMcpBundle extends AbstractBundle
 
         $services->set(McpController::class)
             ->public()
+            ->tag('controller.service_arguments');
+
+        // Les adresses de dépôt : sans réceptionnaire déclaré, toute adresse
+        // est inconnue et la route répond 410 ; rien d'autre ne change.
+        $services->set(Depots::class)
+            ->arg('$receveurs', tagged_iterator('qcdgone_mcp.receveur'))
+            ->arg('$cache', service('cache.app'))
+            ->arg('$adresses', service('router'))
+            ->arg('$dureeS', $config['depot_duree_s'])
+            // ⚠ Sans verrou, deux PUT simultanés peuvent passer (README).
+            ->arg('$verrous', service('lock.factory')->nullOnInvalid());
+
+        $services->set(DepotController::class)
+            ->public()
+            ->arg('$journal', service(JournalDesDepots::class)->nullOnInvalid())
             ->tag('controller.service_arguments');
 
         if (null !== $config['limite_par_utilisateur']) {
