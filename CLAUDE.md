@@ -48,6 +48,10 @@ voit ce qu'elle voit, et pas plus.
 - **Le catalogue valide AVANT les gardes, et les gardes jouent AVANT le domaine.**
   - Un appel mal formé n'entame pas le plafond.
   - Un domaine ne peut pas oublier une garde.
+- **Les préparations jouent AVANT les gardes, les enveloppes APRÈS.** Ce que rend
+  une préparation est ce que lisent les gardes ET le domaine : jamais deux formes
+  du même identifiant. Une enveloppe n'entoure que le domaine ; un appel refusé
+  ne l'atteint pas.
 - **Une exception inattendue REMONTE**, après avoir été journalisée. La convertir en
   `isError` masquerait un défaut sous un message que l'agent recopierait poliment.
 - **Un appelant qui n'implémente pas `UtilisateurMcpInterface` est refusé.** Le

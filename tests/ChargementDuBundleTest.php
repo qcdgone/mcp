@@ -15,6 +15,8 @@ use Qcdgone\Mcp\QcdgoneMcpBundle;
 use Qcdgone\Mcp\Securite\AppelantDelegue;
 use Qcdgone\Mcp\ServeurMcp;
 use Qcdgone\Mcp\Tests\Double\DomaineDEssai;
+use Qcdgone\Mcp\Tests\Double\EnveloppeDEssai;
+use Qcdgone\Mcp\Tests\Double\PreparationDEssai;
 use Qcdgone\Mcp\Tests\Double\ReceveurDEssai;
 use Qcdgone\Mcp\Tests\Double\UtilisateurDEssai;
 use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
@@ -57,6 +59,25 @@ final class ChargementDuBundleTest extends TestCase
         \assert($depots instanceof Depots);
         self::assertInstanceOf(ReceveurDEssai::class, $depots->receveur('image'));
         self::assertTrue($conteneur->has(DepotController::class));
+    }
+
+    /** ⚠ Une préparation ou une enveloppe de l'application jouent sans rien déclarer. */
+    public function testUnePreparationEtUneEnveloppeDeLApplicationSontRecensees(): void
+    {
+        $conteneur = $this->compiler(['name' => 'essai', 'title' => 'Essai', 'instructions' => '…'], static function (ContainerBuilder $builder): void {
+            $builder->register(PreparationDEssai::class, PreparationDEssai::class)->setAutoconfigured(true)->setPublic(true);
+            $builder->register(EnveloppeDEssai::class, EnveloppeDEssai::class)->setAutoconfigured(true)->setPublic(true);
+        });
+
+        $catalogue = $conteneur->get(CatalogueDesOutils::class);
+        \assert($catalogue instanceof CatalogueDesOutils);
+        $catalogue->appeler('lire', ['id' => 1]);
+
+        $preparation = $conteneur->get(PreparationDEssai::class);
+        $enveloppe = $conteneur->get(EnveloppeDEssai::class);
+        \assert($preparation instanceof PreparationDEssai && $enveloppe instanceof EnveloppeDEssai);
+        self::assertSame(['lire'], $preparation->outils, 'L’autoconfiguration doit poser le tag sur une PreparationDesArguments.');
+        self::assertSame(['lire'], $enveloppe->outils, 'L’autoconfiguration doit poser le tag sur une EnveloppeDAppel.');
     }
 
     /** ⚠ Le texte que l'agent lit avant tout appel : sans lui, il devine. */

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Qcdgone\Mcp;
 
+use Qcdgone\Mcp\Appel\EnveloppeDAppel;
+use Qcdgone\Mcp\Appel\PreparationDesArguments;
 use Qcdgone\Mcp\Controller\DepotController;
 use Qcdgone\Mcp\Controller\McpController;
 use Qcdgone\Mcp\Depot\Depots;
@@ -104,6 +106,8 @@ final class QcdgoneMcpBundle extends AbstractBundle
         //   l'interface n'a rien d'autre à déclarer.
         $builder->registerForAutoconfiguration(DomaineMcp::class)->addTag('qcdgone_mcp.domaine');
         $builder->registerForAutoconfiguration(GardeDAppel::class)->addTag('qcdgone_mcp.garde');
+        $builder->registerForAutoconfiguration(PreparationDesArguments::class)->addTag('qcdgone_mcp.preparation');
+        $builder->registerForAutoconfiguration(EnveloppeDAppel::class)->addTag('qcdgone_mcp.enveloppe');
         $builder->registerForAutoconfiguration(ReceveurDeDepot::class)->addTag('qcdgone_mcp.receveur');
 
         $services = $container->services()
@@ -115,7 +119,9 @@ final class QcdgoneMcpBundle extends AbstractBundle
             ->arg('$domaines', tagged_iterator('qcdgone_mcp.domaine'))
             ->arg('$gardes', tagged_iterator('qcdgone_mcp.garde'))
             // Pour les domaines réservés à un rôle ; sans lui, ils restent fermés.
-            ->arg('$droits', service('security.authorization_checker')->nullOnInvalid());
+            ->arg('$droits', service('security.authorization_checker')->nullOnInvalid())
+            ->arg('$preparations', tagged_iterator('qcdgone_mcp.preparation'))
+            ->arg('$enveloppes', tagged_iterator('qcdgone_mcp.enveloppe'));
 
         $services->set(ServeurMcp::class)
             ->arg('$presentation', [

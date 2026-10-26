@@ -218,10 +218,28 @@ firewalls:
   haute d'abord. Le bundle en fournit une, `LimiteParUtilisateur` (priorité
   100), active dès que `limite_par_utilisateur` nomme un limiteur de
   `framework.rate_limiter`.
+- Une **préparation** implémente `Appel\PreparationDesArguments`. Elle joue
+  après la validation du schéma et **avant** les gardes, et ce qu'elle rend est
+  ce que lisent les gardes ET le domaine : un identifiant normalisé
+  (`123-456-7890` → `1234567890`), un objet désigné autrement résolu en son
+  identifiant. Elle lève `ArgumentsInvalides` (-32602, aucun plafond entamé) ou
+  `ObjetIntrouvable`.
+- Une **enveloppe** implémente `Appel\EnveloppeDAppel`. Elle entoure le SEUL
+  appel au domaine, après les gardes (un cache ouvert le temps d'un outil de
+  lecture). La priorité la plus haute est la plus extérieure.
 - Un **journal** implémente `Journal\JournalDesAppels`, aliasé sur l'interface.
   Il reçoit chaque appel d'un outil connu, quelle qu'en soit l'issue, avec des
   arguments BRUTS : il les passe par `ParametresSansSecret::de()` avant de les
-  écrire.
+  écrire. Une ressource visée se relit depuis ces arguments ; leur forme
+  normalisée est celle de la préparation, à rejouer.
+
+L'ordre d'un appel : schéma → préparations → gardes → enveloppes → domaine.
+
+⚠ **Pourquoi la normalisation n'est pas dans une garde** (décidé pour
+mcp-google-ads, le 26/10/2026) : une garde reçoit des `Arguments` qu'elle ne
+peut pas modifier, et le domaine lirait la forme brute qu'elle a contrôlée
+sous une autre ; et la garde de débit (priorité 100) passerait avant, si bien
+qu'un identifiant mal formé entamerait le plafond.
 
 ## Quota de `qcdgone/api`
 
@@ -274,6 +292,9 @@ surtout à changer d'espace de noms :
 | `tests/AppelsMcp.php` | `Qcdgone\Mcp\Test\AppelsMcp` |
 | `path('app_api_mcp')` | `path('qcdgone_mcp')` |
 | tag `app.mcp.domaine` / `app.mcp.garde` | aucun : autoconfiguration |
-| `GardeDAppel::verifier(…, list<Cible>)` | `verifier(…, Arguments)` : la garde résout ses cibles |
+| `GardeDAppel::verifier(…, list<Cible>)` | `verifier(…, Arguments)` : la garde relit ses cibles dans les arguments préparés |
+| `ResolveurDeCibles` appelé par le catalogue (google-ads) | une `Appel\PreparationDesArguments` |
+| `LecturesEnCache::pendant()` dans le catalogue (google-ads) | une `Appel\EnveloppeDAppel` |
+| `ErreurGoogleAds` interceptée par le serveur (google-ads) | `implements EchecPourLAgent` |
 | familles d'outils filtrées par rôle dans le serveur (swan) | `DomaineReserve` |
 | `Outil::lecture()` → `openWorldHint: true` (google-ads) | passer `exterieur: true` |

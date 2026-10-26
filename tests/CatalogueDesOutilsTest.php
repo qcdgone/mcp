@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Qcdgone\Mcp\Tests;
 
 use PHPUnit\Framework\TestCase;
+use Qcdgone\Mcp\AppelRefuse;
+use Qcdgone\Mcp\Appel\EnveloppeDAppel;
+use Qcdgone\Mcp\Appel\PreparationDesArguments;
 use Qcdgone\Mcp\Arguments;
 use Qcdgone\Mcp\ArgumentsInvalides;
 use Qcdgone\Mcp\CatalogueDesOutils;
@@ -63,6 +66,149 @@ final class CatalogueDesOutilsTest extends TestCase
 
         $catalogue->appeler('ecrire', ['titre' => 'T']);
         self::assertSame(['plafond:ecrire:ecriture', 'droits:ecrire:ecriture'], $trace->getArrayCopy());
+    }
+
+    /**
+     * ⚠ La forme normalisée d'un identifiant doit atteindre les gardes ET le
+     *   domaine : une garde qui lirait « 123-456 » et un domaine « 123456 »
+     *   contrôleraient deux choses différentes.
+     */
+    public function testUnePreparationNormaliseLesArgumentsAvantLesGardesEtLeDomaine(): void
+    {
+        $vus = new \ArrayObject();
+        $domaine = new DomaineDEssai(static function (string $nom, Arguments $arguments) use ($vus): array {
+            $vus[] = 'domaine:'.$arguments->texte('filtre');
+
+            return [];
+        });
+        $preparation = new class implements PreparationDesArguments {
+            public function preparer(string $outil, array $definition, array $arguments): array
+            {
+                if (isset($arguments['filtre'])) {
+                    $arguments['filtre'] = str_replace('-', '', (string) $arguments['filtre']);
+                }
+
+                return $arguments;
+            }
+        };
+        $garde = new class($vus) implements GardeDAppel {
+            public function __construct(private \ArrayObject $vus)
+            {
+            }
+
+            public function verifier(string $outil, array $definition, Arguments $arguments): void
+            {
+                $this->vus[] = 'garde:'.$arguments->texte('filtre');
+            }
+        };
+
+        (new CatalogueDesOutils([$domaine], [$garde], null, [$preparation]))->appeler('lire', ['id' => 1, 'filtre' => '123-456']);
+
+        self::assertSame(['garde:123456', 'domaine:123456'], $vus->getArrayCopy());
+    }
+
+    /** ⚠ Un identifiant illisible est une erreur d'argument : ni garde (pas de plafond entamé), ni domaine. */
+    public function testUnePreparationQuiRefuseArreteAvantLesGardes(): void
+    {
+        $domaine = new DomaineDEssai();
+        $gardes = new \ArrayObject();
+        $garde = new class($gardes) implements GardeDAppel {
+            public function __construct(private \ArrayObject $gardes)
+            {
+            }
+
+            public function verifier(string $outil, array $definition, Arguments $arguments): void
+            {
+                $this->gardes[] = $outil;
+            }
+        };
+        $preparation = new class implements PreparationDesArguments {
+            public function preparer(string $outil, array $definition, array $arguments): array
+            {
+                throw new ArgumentsInvalides('filtre : illisible.');
+            }
+        };
+
+        try {
+            (new CatalogueDesOutils([$domaine], [$garde], null, [$preparation]))->appeler('lire', ['id' => 1, 'filtre' => '?']);
+            self::fail('La préparation aurait dû refuser.');
+        } catch (ArgumentsInvalides $e) {
+            self::assertSame('filtre : illisible.', $e->getMessage());
+        }
+
+        self::assertSame([], $gardes->getArrayCopy());
+        self::assertSame([], $domaine->appels);
+    }
+
+    /** L'enveloppe entoure le SEUL appel au domaine, après les gardes ; la première est la plus extérieure. */
+    public function testLesEnveloppesEntourentLAppelAuDomaineApresLesGardes(): void
+    {
+        $trace = new \ArrayObject();
+        $domaine = new DomaineDEssai(static function (string $nom) use ($trace): array {
+            $trace[] = 'domaine';
+
+            return ['fait' => true];
+        });
+        $garde = new class($trace) implements GardeDAppel {
+            public function __construct(private \ArrayObject $trace)
+            {
+            }
+
+            public function verifier(string $outil, array $definition, Arguments $arguments): void
+            {
+                $this->trace[] = 'garde';
+            }
+        };
+        $enveloppe = fn (string $nom): EnveloppeDAppel => new class($trace, $nom) implements EnveloppeDAppel {
+            public function __construct(private \ArrayObject $trace, private string $nom)
+            {
+            }
+
+            public function envelopper(string $outil, array $definition, \Closure $appel): array
+            {
+                $lecture = true === $definition['annotations']['readOnlyHint'] ? 'lecture' : 'ecriture';
+                $this->trace[] = $this->nom.':avant:'.$lecture;
+                try {
+                    return $appel();
+                } finally {
+                    $this->trace[] = $this->nom.':apres';
+                }
+            }
+        };
+
+        $resultat = (new CatalogueDesOutils([$domaine], [$garde], null, [], [$enveloppe('cache'), $enveloppe('chrono')]))->appeler('vide', []);
+
+        self::assertSame(['fait' => true], $resultat);
+        self::assertSame(['garde', 'cache:avant:lecture', 'chrono:avant:lecture', 'domaine', 'chrono:apres', 'cache:apres'], $trace->getArrayCopy());
+    }
+
+    /** ⚠ Un appel refusé par une garde n'atteint pas l'enveloppe : un cache ne s'ouvre pas pour rien. */
+    public function testUnAppelRefuseParUneGardeNAtteintPasLEnveloppe(): void
+    {
+        $enveloppe = new class implements EnveloppeDAppel {
+            public int $appels = 0;
+
+            public function envelopper(string $outil, array $definition, \Closure $appel): array
+            {
+                ++$this->appels;
+
+                return $appel();
+            }
+        };
+        $garde = new class implements GardeDAppel {
+            public function verifier(string $outil, array $definition, Arguments $arguments): void
+            {
+                throw new AppelRefuse('Non.', 'refuse');
+            }
+        };
+
+        try {
+            (new CatalogueDesOutils([new DomaineDEssai()], [$garde], null, [], [$enveloppe]))->appeler('vide', []);
+            self::fail('La garde aurait dû refuser.');
+        } catch (AppelRefuse) {
+        }
+
+        self::assertSame(0, $enveloppe->appels);
     }
 
     /** ⚠ Le second masquerait le premier sans que rien ne le dise. */

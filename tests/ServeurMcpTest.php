@@ -6,11 +6,14 @@ namespace Qcdgone\Mcp\Tests;
 
 use PHPUnit\Framework\TestCase;
 use Qcdgone\Mcp\AppelRefuse;
+use Qcdgone\Mcp\Appel\PreparationDesArguments;
+use Qcdgone\Mcp\ArgumentsInvalides;
 use Qcdgone\Mcp\Arguments;
 use Qcdgone\Mcp\CatalogueDesOutils;
 use Qcdgone\Mcp\EchecPourLAgent;
 use Qcdgone\Mcp\Garde\GardeDAppel;
 use Qcdgone\Mcp\Journal\IssueDAppel;
+use Qcdgone\Mcp\ObjetIntrouvable;
 use Qcdgone\Mcp\ServeurMcp;
 use Qcdgone\Mcp\Tests\Double\DomaineDEssai;
 use Qcdgone\Mcp\Tests\Double\DomaineReserveDEssai;
@@ -188,6 +191,45 @@ final class ServeurMcpTest extends TestCase
         }
 
         self::assertSame([['outil' => 'vide', 'issue' => IssueDAppel::Erreur, 'code' => 'DomainException']], $this->journal->lignes);
+    }
+
+    /**
+     * ⚠ Un identifiant illisible pour la préparation est une erreur de l'agent
+     *   (-32602), journalisée ; un objet qu'elle ne trouve pas est un résultat.
+     */
+    public function testUnRefusDeLaPreparationSuitLesDeuxCanaux(): void
+    {
+        $preparation = new class implements PreparationDesArguments {
+            public function preparer(string $outil, array $definition, array $arguments): array
+            {
+                return match ($arguments['id']) {
+                    1 => throw new ArgumentsInvalides('id : illisible.'),
+                    2 => throw new ObjetIntrouvable('Fiche 2 introuvable.'),
+                    default => $arguments,
+                };
+            }
+        };
+        $this->journal = new JournalEnMemoire();
+        $serveur = new ServeurMcp(
+            new CatalogueDesOutils([$domaine = new DomaineDEssai()], [], null, [$preparation]),
+            new RequestStack(),
+            ['name' => 'essai', 'title' => 'Essai', 'version' => '1.0', 'instructions' => '…', 'website_path' => null, 'icon' => ['path' => null, 'mime_type' => 'image/png', 'sizes' => []]],
+            $this->journal,
+        );
+
+        $illisible = $this->appeler($serveur, 'lire', ['id' => 1]);
+        self::assertSame(ServeurMcp::PARAMETRES_INVALIDES, $illisible['error']['code']);
+        self::assertSame('id : illisible.', $illisible['error']['message']);
+
+        $introuvable = $this->appeler($serveur, 'lire', ['id' => 2])['result'];
+        self::assertTrue($introuvable['isError']);
+        self::assertSame('Fiche 2 introuvable.', $introuvable['content'][0]['text']);
+
+        self::assertSame([], $domaine->appels);
+        self::assertSame([
+            ['outil' => 'lire', 'issue' => IssueDAppel::Erreur, 'code' => 'arguments_invalides'],
+            ['outil' => 'lire', 'issue' => IssueDAppel::Erreur, 'code' => 'objet_introuvable'],
+        ], $this->journal->lignes);
     }
 
     public function testChaqueAppelDUnOutilConnuEstJournaliseQuelleQuEnSoitLIssue(): void

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Qcdgone\Mcp;
 
+use Qcdgone\Mcp\Appel\EnveloppeDAppel;
+use Qcdgone\Mcp\Appel\PreparationDesArguments;
 use Qcdgone\Mcp\Garde\GardeDAppel;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
 
@@ -24,6 +26,9 @@ use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
  * ⚠ **Un domaine réservé ({@see DomaineReserve}) n'existe que pour son rôle**,
  *   vérifié à CHAQUE lecture, jamais gardé d'une requête à l'autre : le service
  *   survit aux requêtes dans un worker ou un test, l'appelant non.
+ *
+ * L'ordre d'un appel : schéma, préparations ({@see PreparationDesArguments}),
+ * gardes, puis le domaine entouré des enveloppes ({@see EnveloppeDAppel}).
  */
 final class CatalogueDesOutils
 {
@@ -34,13 +39,17 @@ final class CatalogueDesOutils
     private array $definitions = [];
 
     /**
-     * @param iterable<DomaineMcp>  $domaines
-     * @param iterable<GardeDAppel> $gardes   par priorité décroissante
+     * @param iterable<DomaineMcp>              $domaines
+     * @param iterable<GardeDAppel>             $gardes       par priorité décroissante
+     * @param iterable<PreparationDesArguments> $preparations par priorité décroissante
+     * @param iterable<EnveloppeDAppel>         $enveloppes   la première la plus extérieure
      */
     public function __construct(
         private readonly iterable $domaines,
         private readonly iterable $gardes = [],
         private readonly ?AuthorizationCheckerInterface $droits = null,
+        private readonly iterable $preparations = [],
+        private readonly iterable $enveloppes = [],
     ) {
     }
 
@@ -106,6 +115,12 @@ final class CatalogueDesOutils
             throw new ArgumentsInvalides(\sprintf('Champ(s) obligatoire(s) pour %s : %s.', $nom, implode(', ', $manquants)));
         }
 
+        // ⚠ AVANT les gardes : elles contrôlent ce que le domaine exécutera,
+        //   et un identifiant illisible n'entame aucun plafond.
+        foreach ($this->preparations as $preparation) {
+            $arguments = $preparation->preparer($nom, $definition, $arguments);
+        }
+
         $lus = new Arguments($arguments);
 
         // ⚠ APRÈS la validation des arguments : un appel mal formé est une
@@ -114,7 +129,14 @@ final class CatalogueDesOutils
             $garde->verifier($nom, $definition, $lus);
         }
 
-        return $domaine->appeler($nom, $lus);
+        $appel = static fn (): array => $domaine->appeler($nom, $lus);
+        // La première enveloppe est la plus extérieure : on les pose de la
+        // dernière à la première.
+        foreach (array_reverse(iterator_to_array($this->enveloppes, false)) as $enveloppe) {
+            $appel = static fn (): array => $enveloppe->envelopper($nom, $definition, $appel);
+        }
+
+        return $appel();
     }
 
     private function visible(DomaineMcp $domaine): bool
